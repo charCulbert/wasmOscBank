@@ -1,33 +1,5 @@
 # WebAssembly C/C++ Audio Worklet Example
 
-## Overview of Audio Worklet Architecture
-
-1. **Thread Initialization** (once per application):
-   - Create a dedicated audio processing thread
-   - This single thread handles all audio processing for the entire application
-   - Can only be initialized once per audio context
-
-2. **Processor Registration** (once per processor type):
-   - Register each unique audio worklet processor blueprint
-   - Each processor type defines its own:
-     - Parameters
-     - Input/output configuration
-     - Processing behavior
-   - Multiple different processors can be registered within the same thread
-
-3. **Node Creation** (multiple instances):
-   - Create instances of any registered processor type
-   - Each node instance maintains:
-     - Its own independent state
-     - Unique parameter values
-     - Individual connections
-   - Can create many nodes from the same processor type
-
-In our case, we use this architecture to implement an oscillator bank, where:
-- A single thread handles all audio processing
-- One processor type defines our oscillator behavior
-- Multiple oscillator nodes can be created and controlled independently
-
 ## Project Structure
 
 ### Source Files (Manual)
@@ -69,14 +41,6 @@ python3 server.py
 - Open `http://localhost:8080` in your web browser
 - The custom server is required for SharedArrayBuffer support
 
-## Features
-
-- Dynamic creation/removal of oscillators
-- Real-time frequency and volume control per oscillator
-- Parameter smoothing for click-free audio
-- Efficient WebAssembly-powered audio processing
-- Cross-platform compatibility
-
 ## Implementation Details
 
 ### C Implementation (`wasmOscBank.c`)
@@ -113,6 +77,37 @@ if __name__ == '__main__':
 - [Web Audio API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API)
 - [AudioWorklet Documentation](https://developer.mozilla.org/en-US/docs/Web/API/AudioWorklet)
 - [SharedArrayBuffer Requirements](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SharedArrayBuffer#security_requirements)
+
+
+
+## Overview of Audio Worklet Architecture
+
+1. **Thread Initialization** (once per application):
+   - Create a dedicated audio processing thread
+   - This single thread handles all audio processing for the entire application
+   - Can only be initialized once per audio context
+
+2. **Processor Registration** (once per processor type):
+   - Register each unique audio worklet processor blueprint
+   - Each processor type defines its own:
+     - Parameters
+     - Input/output configuration
+     - Processing behavior
+   - Multiple different processors can be registered within the same thread
+
+3. **Node Creation** (multiple instances):
+   - Create instances of any registered processor type
+   - Each node instance maintains:
+     - Its own independent state
+     - Unique parameter values
+     - Individual connections
+   - Can create many nodes from the same processor type
+
+In our case, we use this architecture to implement an oscillator bank, where:
+- A single thread handles all audio processing
+- One processor type defines our oscillator behavior
+- Multiple oscillator nodes can be created and controlled independently
+
 
 ## Browser Support
 
