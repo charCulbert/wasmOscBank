@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebAssembly Oscillator Bank</title>
+    <!-- Use IBM Plex Mono for a more technical aesthetic -->
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400&display=swap" rel="stylesheet">
+    <style>
+        /* Core styling with minimal formatting */
+        body { background: black; color: white; font-family: 'IBM Plex Mono', monospace; text-align: center; padding: 20px; }
+        #setup-controls { margin: 20px 0; padding: 20px; border-bottom: 1px solid #333; }
+        #oscillator-container { display: flex; flex-wrap: wrap; gap: 20px; padding: 20px; justify-content: center; }
+        .oscillator-controls { background: rgba(255,255,255,0.1); border-radius: 8px; padding: 15px; min-width: 300px; }
+        .control-group { margin: 15px 0; }
+        button { margin: 5px; padding: 10px 20px; font-size: 16px; background: #444; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:disabled { background: #222; cursor: not-allowed; }
+        input[type="range"] { width: 80%; margin: 10px; }
+        label { display: inline-block; width: 100px; text-align: right; margin-right: 10px; }
+    </style>
+</head>
+<body>
+    <h1>WebAssembly Oscillator Bank</h1>
+
+    <!-- Setup controls: Initialize the audio system in sequence -->
+    <div id="setup-controls">
+        <button id="startButton">Create Audio Context</button>
+        <button id="startAudioWorkletThreadButton" disabled>Start Audio Worklet Thread</button>
+        <button id="createAudioWorkletProcessor" disabled>Create Processor</button>
+        <button id="toggleButton" disabled>Toggle Audio</button>
+        <button id="addOscillator" disabled>Add Oscillator</button>
+        <button id="createMultiple" disabled>Add 3 Oscillators</button>
+    </div>
+
+    <!-- Dynamic container for oscillator interfaces -->
+    <div id="oscillator-container"></div>
+
+    <script src="wasmOscBank.js"></script>
+    <script>
+        // Manager class handles WebAssembly audio interactions and UI state
+        class AudioWorkletManager {
+            constructor() {
+                this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                this.handle = emscriptenRegisterAudioObject(this.audioContext);
+                this.nodes = [];
+                this.oscCount = 0;
+            }
+
+            // Core WebAssembly interface methods
+            startWorkletThread() {
+                return Module.ccall('startAudioWorkletThread', null, ['number'], [this.handle]);
+            }
+
+            createProcessor() {
+                return Module.ccall('createAudioWorkletProcessor', null, ['number'], [this.handle]);
+            }
+
+            createNode() {
+                const nodeHandle = Module.ccall('connectAudioWorkletProcessor', 'number', ['number'], [this.handle]);
+                return emscriptenGetAudioObject(nodeHandle);
+            }
+
+            // Toggles audio context between running/suspended states
+            async toggleAudio() {
+                if (this.audioContext.state === 'running') {
+                    await this.audioContext.suspend();
+                } else {
+                    await this.audioContext.resume();
+                }
+            }
+
+            // Creates a new oscillator instance with UI controls
+            createOscillator() {
+                const oscId = this.oscCount++;
+                const node = this.createNode();
+                
+                const oscContainer = document.createElement('div');
+                oscContainer.className = 'oscillator-controls';
+                oscContainer.innerHTML = `
+                    <h3>Oscillator ${oscId + 1}</h3>
+                    <div class="control-group">
+                        <label for="pitch-${oscId}">Frequency:</label>
+                        <input type="range" id="pitch-${oscId}" 
+                               min="20" max="10000" value="440" class="slider">
+                        <span id="pitchValue-${oscId}">440 Hz</span>
+                    </div>
+                    <div class="control-group">
+                        <label for="volume-${oscId}">Volume:</label>
+                        <input type="range" id="volume-${oscId}" 
+                               min="0" max="100" value="30" class="slider">
+                        <span id="volumeValue-${oscId}">30%</span>
+                    </div>
+                `;
+                
+                document.getElementById('oscillator-container').appendChild(oscContainer);
+                this.connectUIControls(node, oscId);
+                this.nodes.push(node);
+                return node;
+            }
+
+            // Connects UI sliders to audio parameters for an oscillator
+            connectUIControls(node, oscId) {
+                const controls = {
+                    pitch: document.getElementById(`pitch-${oscId}`),
+                    volume: document.getElementById(`volume-${oscId}`),
+                    pitchDisplay: document.getElementById(`pitchValue-${oscId}`),
+                    volumeDisplay: document.getElementById(`volumeValue-${oscId}`)
+                };
+                
+                controls.pitch.oninput = (e) => {
+                    const value = parseInt(e.target.value);
+                    controls.pitchDisplay.textContent = `${value} Hz`;
+                    node.parameters.get('0').setValueAtTime(value, node.context.currentTime);
+                };
+                
+                controls.volume.oninput = (e) => {
+                    const value = parseInt(e.target.value);
+                    controls.volumeDisplay.textContent = `${value}%`;
+                    node.parameters.get('1').setValueAtTime(value/100, node.context.currentTime);
+                };
+            }
+
+            // Utility to create multiple oscillators at once
+            createMultipleOscillators(count) {
+                for (let i = 0; i < count; i++) {
+                    this.createOscillator();
+                }
+            }
+        }
+
+        // Initialize application when DOM is ready
+        document.addEventListener('DOMContentLoaded', () => {
+            let manager;
+            
+            // Step 1: Create audio context and manager
+            document.getElementById('startButton').addEventListener('click', () => {
+                manager = new AudioWorkletManager();
+                document.getElementById('startAudioWorkletThreadButton').disabled = false;
+                document.getElementById('startButton').disabled = true;
+                document.getElementById('toggleButton').disabled = false;
+            });
+
+            // Step 2: Initialize audio worklet thread
+            document.getElementById('startAudioWorkletThreadButton').addEventListener('click', () => {
+                manager.startWorkletThread();
+                document.getElementById('startAudioWorkletThreadButton').disabled = true;
+                document.getElementById('createAudioWorkletProcessor').disabled = false;
+            });
+
+            // Step 3: Create the audio processor
+            document.getElementById('createAudioWorkletProcessor').addEventListener('click', () => {
+                manager.createProcessor();
+                document.getElementById('addOscillator').disabled = false;
+                document.getElementById('createMultiple').disabled = false;
+                document.getElementById('createAudioWorkletProcessor').disabled = true;
+            });
+
+            // Oscillator creation handlers
+            document.getElementById('addOscillator').addEventListener('click', () => 
+                manager.createOscillator());
+            document.getElementById('createMultiple').addEventListener('click', () => 
+                manager.createMultipleOscillators(3));
+            document.getElementById('toggleButton').addEventListener('click', () => 
+                manager.toggleAudio());
+        });
+    </script>
+</body>
+</html>
